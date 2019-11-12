@@ -77,55 +77,42 @@ func main() {
 	}
 }
 
+const defaultClusterName = "https://api.ci.openshift.org"
+
 func generateBranchedConfigs(currentRelease, bumpRelease string, futureReleases []string, input config.DataWithInfo) []config.DataWithInfo {
-	if !(promotion.PromotesOfficialImages(&input.Configuration) && input.Configuration.PromotionConfiguration.Name == currentRelease) {
-		return nil
-	}
 
 	var output []config.DataWithInfo
 	input.Logger().Info("Branching configuration.")
 	currentConfig := input.Configuration
 
-	// if we are asked to bump, we need to update the config for the dev branch
-	devRelease := currentRelease
-	if bumpRelease != "" && promotion.IsBumpable(input.Info.Branch, currentRelease) {
-		devRelease = bumpRelease
-		updateRelease(&currentConfig, bumpRelease)
-		updateImages(&currentConfig, currentRelease, bumpRelease)
-		// this config will continue to run for the dev branch but will be bumped
-		output = append(output, config.DataWithInfo{Configuration: currentConfig, Info: input.Info})
+	var futureConfig api.ReleaseBuildConfiguration
+	if err := deepcopy.Copy(&futureConfig, &currentConfig); err != nil {
+		input.Logger().WithError(err).Error("failed to copy input CI Operator configuration")
+		return nil
 	}
 
-	for _, futureRelease := range futureReleases {
-		futureBranch, err := promotion.DetermineReleaseBranch(currentRelease, futureRelease, input.Info.Branch)
-		if err != nil {
-			input.Logger().WithError(err).Error("could not determine future branch that would promote to current imagestream")
-			return nil
+	var newBaseImages map[string]api.ImageStreamTagReference
+	for k, baseImage := range futureConfig.BaseImages {
+		if newBaseImages == nil {
+			newBaseImages = map[string]api.ImageStreamTagReference{}
 		}
-		if futureBranch == input.Info.Branch {
-			// some repos release on their dev branch, so we don't need
-			// to make any changes for this one
-			continue
+		if baseImage.Cluster == "" {
+			baseImage.Cluster = defaultClusterName
 		}
-
-		var futureConfig api.ReleaseBuildConfiguration
-		if err := deepcopy.Copy(&futureConfig, &currentConfig); err != nil {
-			input.Logger().WithError(err).Error("failed to copy input CI Operator configuration")
-			return nil
-		}
-
-		// the new config will point to the future release
-		updateRelease(&futureConfig, futureRelease)
-		// we cannot have two configs promoting to the same output, so
-		// we need to make sure the release branch config is disabled
-		futureConfig.PromotionConfiguration.Disabled = futureRelease == devRelease
-		// users can reference the release streams via build roots or
-		// input images, so we need to update those, too
-		updateImages(&futureConfig, devRelease, futureRelease)
-
-		// this config will promote to the new location on the release branch
-		output = append(output, config.DataWithInfo{Configuration: futureConfig, Info: copyInfoSwappingBranches(input.Info, futureBranch)})
+		newBaseImages[k] = baseImage
 	}
+	futureConfig.BaseImages = newBaseImages
+
+	if futureConfig.ReleaseTagConfiguration != nil && futureConfig.ReleaseTagConfiguration.Cluster == "" {
+		futureConfig.ReleaseTagConfiguration.Cluster = defaultClusterName
+	}
+
+	if futureConfig.BuildRootImage != nil && futureConfig.BuildRootImage.ImageStreamTagReference != nil && futureConfig.BuildRootImage.ImageStreamTagReference.Cluster == "" {
+		futureConfig.BuildRootImage.ImageStreamTagReference.Cluster = defaultClusterName
+	}
+
+	// this config will promote to the new location on the release branch
+	output = append(output, config.DataWithInfo{Configuration: futureConfig, Info: input.Info})
 	return output
 }
 
