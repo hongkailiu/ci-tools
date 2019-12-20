@@ -79,12 +79,11 @@ func main() {
 }
 
 func generateMigratedConfigs(input config.DataWithInfo) []config.DataWithInfo {
-
 	if !migrate.Migrated(input.Info.Org, input.Info.Repo, input.Info.Branch) {
 		logrus.Debugf("%s/%s is not migrated", input.Info.Org, input.Info.Repo)
 		return nil
 	}
-	logrus.Infof("%s/%s is migrated", input.Info.Org, input.Info.Repo)
+	logrus.Infof("%s/%s/%s is migrated", input.Info.Org, input.Info.Repo, input.Info.Branch)
 
 	var output []config.DataWithInfo
 	input.Logger().Info("Migrating configuration.")
