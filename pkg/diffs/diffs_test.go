@@ -322,6 +322,29 @@ func TestGetChangedPresubmits(t *testing.T) {
 			},
 		},
 		{
+			name: "different spec is identified as a diff - path_alias",
+			configGenerator: func(t *testing.T) (*prowconfig.Config, *prowconfig.Config) {
+				var p []prowconfig.Presubmit
+				if err := deepcopy.Copy(&p, basePresubmit); err != nil {
+					t.Fatal(err)
+				}
+				p[0].PathAlias = "github.com/openshift/origin"
+				return makeConfig(basePresubmit), makeConfig(p)
+
+			},
+			expected: config.Presubmits{
+				// TODO should be this
+				/*"org/repo": func() []prowconfig.Presubmit {
+					var p []prowconfig.Presubmit
+					if err := deepcopy.Copy(&p, basePresubmit); err != nil {
+						t.Fatal(err)
+					}
+					p[0].PathAlias = "github.com/openshift/origin"
+					return p
+				}(),*/
+			},
+		},
+		{
 			name: "different spec is identified as a diff - massive changes",
 			configGenerator: func(t *testing.T) (*prowconfig.Config, *prowconfig.Config) {
 				var p []prowconfig.Presubmit
