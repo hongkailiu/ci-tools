@@ -21,7 +21,6 @@ import (
 	"github.com/openshift/ci-tools/pkg/config"
 	"github.com/openshift/ci-tools/pkg/jobconfig"
 	jc "github.com/openshift/ci-tools/pkg/jobconfig"
-	"github.com/openshift/ci-tools/pkg/migrate"
 	"github.com/openshift/ci-tools/pkg/promotion"
 )
 
@@ -59,6 +58,8 @@ exec ci-operator \
 	oauthTokenPath  = "/usr/local/github-credentials"
 	oauthSecretName = "github-credentials-openshift-ci-robot-private-git-cloner"
 	oauthKey        = "oauth"
+
+	build01Context = "ci/api-build01-ci-devcluster-openshift-com:6443"
 )
 
 var (
@@ -131,68 +132,51 @@ func generatePodSpec(info *prowgenInfo, secrets []*cioperatorapi.Secret) *kubeap
 			Key: info.Basename(),
 		},
 	}
-	volumeMounts := []kubeapi.VolumeMount{{
-		Name:      sentryDsnMountName,
-		MountPath: sentryDsnMountPath,
-		ReadOnly:  true,
-	}}
-
-	if migrate.Migrated(info.Org, info.Repo, info.Branch) {
-		volumeMounts = []kubeapi.VolumeMount{
-			{
-				Name:      sentryDsnMountName,
-				MountPath: sentryDsnMountPath,
-				ReadOnly:  true,
-			},
-			{
-				Name:      "apici-ci-operator-credentials",
-				MountPath: "/etc/apici",
-				ReadOnly:  true,
-			},
-			{
-				Name:      "pull-secret",
-				MountPath: "/etc/pull-secret",
-				ReadOnly:  true,
-			},
-		}
+	volumeMounts := []kubeapi.VolumeMount{
+		{
+			Name:      sentryDsnMountName,
+			MountPath: sentryDsnMountPath,
+			ReadOnly:  true,
+		},
+		{
+			Name:      "apici-ci-operator-credentials",
+			MountPath: "/etc/apici",
+			ReadOnly:  true,
+		},
+		{
+			Name:      "pull-secret",
+			MountPath: "/etc/pull-secret",
+			ReadOnly:  true,
+		},
 	}
 
-	volumes := []kubeapi.Volume{{
-		Name: sentryDsnMountName,
-		VolumeSource: kubeapi.VolumeSource{
-			Secret: &kubeapi.SecretVolumeSource{SecretName: sentryDsnSecretName},
-		},
-	}}
-
-	if migrate.Migrated(info.Org, info.Repo, info.Branch) {
-		volumes = []kubeapi.Volume{
-			{
-				Name: sentryDsnMountName,
-				VolumeSource: kubeapi.VolumeSource{
-					Secret: &kubeapi.SecretVolumeSource{SecretName: sentryDsnSecretName},
-				},
+	volumes := []kubeapi.Volume{
+		{
+			Name: sentryDsnMountName,
+			VolumeSource: kubeapi.VolumeSource{
+				Secret: &kubeapi.SecretVolumeSource{SecretName: sentryDsnSecretName},
 			},
-			{
-				Name: "apici-ci-operator-credentials",
-				VolumeSource: kubeapi.VolumeSource{
-					Secret: &kubeapi.SecretVolumeSource{
-						SecretName: "apici-ci-operator-credentials",
-						Items: []kubeapi.KeyToPath{
-							{
-								Key:  "sa.ci-operator.apici.config",
-								Path: "kubeconfig",
-							},
+		},
+		{
+			Name: "apici-ci-operator-credentials",
+			VolumeSource: kubeapi.VolumeSource{
+				Secret: &kubeapi.SecretVolumeSource{
+					SecretName: "apici-ci-operator-credentials",
+					Items: []kubeapi.KeyToPath{
+						{
+							Key:  "sa.ci-operator.apici.config",
+							Path: "kubeconfig",
 						},
 					},
 				},
 			},
-			{
-				Name: "pull-secret",
-				VolumeSource: kubeapi.VolumeSource{
-					Secret: &kubeapi.SecretVolumeSource{SecretName: "regcred"},
-				},
+		},
+		{
+			Name: "pull-secret",
+			VolumeSource: kubeapi.VolumeSource{
+				Secret: &kubeapi.SecretVolumeSource{SecretName: "regcred"},
 			},
-		}
+		},
 	}
 
 	for _, secret := range secrets {
@@ -259,21 +243,9 @@ func generateCiOperatorPodSpec(info *prowgenInfo, secrets []*cioperatorapi.Secre
 		fmt.Sprintf("--org=%s", info.Org),
 		fmt.Sprintf("--repo=%s", info.Repo),
 		fmt.Sprintf("--branch=%s", info.Branch),
+		"--kubeconfig=/etc/apici/kubeconfig",
+		"--image-import-pull-secret=/etc/pull-secret/.dockerconfigjson",
 	}, additionalArgs...)
-
-	if migrate.Migrated(info.Org, info.Repo, info.Branch) {
-		ret.Containers[0].Args = append([]string{
-			"--give-pr-author-access-to-namespace=true",
-			"--artifact-dir=$(ARTIFACTS)",
-			fmt.Sprintf("--sentry-dsn-path=%s", sentryDsnSecretPath),
-			"--resolver-address=http://ci-operator-configresolver-ci.svc.ci.openshift.org",
-			fmt.Sprintf("--org=%s", info.Org),
-			fmt.Sprintf("--repo=%s", info.Repo),
-			fmt.Sprintf("--branch=%s", info.Branch),
-			"--kubeconfig=/etc/apici/kubeconfig",
-			"--image-import-pull-secret=/etc/pull-secret/.dockerconfigjson",
-		}, additionalArgs...)
-	}
 	for _, target := range targets {
 		ret.Containers[0].Args = append(ret.Containers[0].Args, fmt.Sprintf("--target=%s", target))
 	}
@@ -393,32 +365,28 @@ func generatePodSpecOthers(info *prowgenInfo, release string, test *cioperatorap
 	}
 	// TODO expose boskos (behind an oauth proxy) so it can be used by build clusters
 	if needsLeaseServer {
-		if migrate.Migrated(info.Org, info.Repo, info.Branch) {
-			container.Args = append(container.Args, "--lease-server=https://boskos-ci.svc.ci.openshift.org")
-			container.Args = append(container.Args, "--lease-server-username=ci")
-			container.Args = append(container.Args, "--lease-server-password-file=/etc/boskos/password")
-			container.VolumeMounts = append(container.VolumeMounts, kubeapi.VolumeMount{
-				Name:      "boskos",
-				MountPath: "/etc/boskos",
-				ReadOnly:  true,
-			})
-			podSpec.Volumes = append(podSpec.Volumes, kubeapi.Volume{
-				Name: "boskos",
-				VolumeSource: kubeapi.VolumeSource{
-					Secret: &kubeapi.SecretVolumeSource{
-						SecretName: "boskos-credentials",
-						Items: []kubeapi.KeyToPath{
-							{
-								Key:  "password",
-								Path: "password",
-							},
+		container.Args = append(container.Args, "--lease-server=https://boskos-ci.svc.ci.openshift.org")
+		container.Args = append(container.Args, "--lease-server-username=ci")
+		container.Args = append(container.Args, "--lease-server-password-file=/etc/boskos/password")
+		container.VolumeMounts = append(container.VolumeMounts, kubeapi.VolumeMount{
+			Name:      "boskos",
+			MountPath: "/etc/boskos",
+			ReadOnly:  true,
+		})
+		podSpec.Volumes = append(podSpec.Volumes, kubeapi.Volume{
+			Name: "boskos",
+			VolumeSource: kubeapi.VolumeSource{
+				Secret: &kubeapi.SecretVolumeSource{
+					SecretName: "boskos-credentials",
+					Items: []kubeapi.KeyToPath{
+						{
+							Key:  "password",
+							Path: "password",
 						},
 					},
 				},
-			})
-		} else {
-			container.Args = append(container.Args, "--lease-server=http://boskos")
-		}
+			},
+		})
 	}
 	container.VolumeMounts = append(container.VolumeMounts, kubeapi.VolumeMount{Name: "cluster-profile", MountPath: clusterProfilePath})
 	if len(template) > 0 {
@@ -663,7 +631,9 @@ func generateJobs(
 		}
 
 		if element.Cron == nil {
-			presubmits[orgrepo] = append(presubmits[orgrepo], *generatePresubmitForTest(element.As, info, label, podSpec, true, configSpec.CanonicalGoRepository))
+			presubmit := *generatePresubmitForTest(element.As, info, label, podSpec, true, configSpec.CanonicalGoRepository)
+			presubmit.Cluster = build01Context
+			presubmits[orgrepo] = append(presubmits[orgrepo], presubmit)
 		} else {
 			periodics = append(periodics, *generatePeriodicForTest(element.As, info, label, podSpec, true, *element.Cron, configSpec.CanonicalGoRepository))
 		}
@@ -687,7 +657,9 @@ func generateJobs(
 			presubmitTargets = append(presubmitTargets, "[release:latest]")
 		}
 		podSpec := generateCiOperatorPodSpec(info, nil, presubmitTargets)
-		presubmits[orgrepo] = append(presubmits[orgrepo], *generatePresubmitForTest("images", info, label, podSpec, true, configSpec.CanonicalGoRepository))
+		presubmit := *generatePresubmitForTest("images", info, label, podSpec, true, configSpec.CanonicalGoRepository)
+		presubmit.Cluster = build01Context
+		presubmits[orgrepo] = append(presubmits[orgrepo], presubmit)
 
 		if configSpec.PromotionConfiguration != nil {
 			podSpec := generateCiOperatorPodSpec(info, nil, imageTargets, []string{"--promote"}...)
