@@ -68,25 +68,17 @@ func generateMigratedConfigs(input config.DataWithInfo) []config.DataWithInfo {
 		return nil
 	}
 
-	var newBaseImages map[string]api.ImageStreamTagReference
-	for k, baseImage := range futureConfig.BaseImages {
-		if newBaseImages == nil {
-			newBaseImages = map[string]api.ImageStreamTagReference{}
+	var rc api.ResourceConfiguration
+	for k, rr := range futureConfig.Resources {
+		if rc == nil {
+			rc = map[string]api.ResourceRequirements{}
 		}
-		if baseImage.Cluster == "" {
-			baseImage.Cluster = prowClusterURL
+		if _, ok := rr.Limits["memory"]; ok {
+			delete(rr.Limits, "memory")
 		}
-		newBaseImages[k] = baseImage
+		rc[k] = rr
 	}
-	futureConfig.BaseImages = newBaseImages
-
-	if futureConfig.ReleaseTagConfiguration != nil && futureConfig.ReleaseTagConfiguration.Cluster == "" {
-		futureConfig.ReleaseTagConfiguration.Cluster = prowClusterURL
-	}
-
-	if futureConfig.BuildRootImage != nil && futureConfig.BuildRootImage.ImageStreamTagReference != nil && futureConfig.BuildRootImage.ImageStreamTagReference.Cluster == "" {
-		futureConfig.BuildRootImage.ImageStreamTagReference.Cluster = prowClusterURL
-	}
+	futureConfig.Resources = rc
 
 	// this config will promote to the new location on the release branch
 	output = append(output, config.DataWithInfo{Configuration: futureConfig, Info: input.Info})
