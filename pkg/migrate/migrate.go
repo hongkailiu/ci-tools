@@ -45,6 +45,12 @@ var (
 		"openshift-priv/client-go/*",
 		"openshift-priv/leader-elector/*",
 		"openshift-priv/openshift-tuned/*",
+		//
+		"integr8ly/cloud-resource-operator/*",
+		"integr8ly/integreatly-operator/*",
+		"integr8ly/installation/*",
+		"integr8ly/heimdall/*",
+		"integr8ly/ansible-tower-configuration/*",
 	)
 	migratedRegexes []*regexp.Regexp
 )
