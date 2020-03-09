@@ -681,7 +681,7 @@ The multistage test style in the <code>ci-operator</code> is a modular test desi
 allows users to create new tests by combining smaller, individual test steps.
 These individual steps can be put into a shared registry that other tests can
 access. This results in test workflows that are easier to maintain and
-upgrade as multiple test workflows can share steps and don’t have to each be
+upgrade as multiple test workflows can share steps and don’t have to be
 updated individually to fix bugs or add new features. It also reduces the
 chances of a mistake when copying a feature from one test workflow to
 another.
