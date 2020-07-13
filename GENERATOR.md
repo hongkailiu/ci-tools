@@ -49,6 +49,7 @@ following fields will not be overwritten if they are already present:
  - `max_concurrency`
  - `skip_report`
  - `cluster`
+ - `reporter_config`
 
 ## Postsubmits
 

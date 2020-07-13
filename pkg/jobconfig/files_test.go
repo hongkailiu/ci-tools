@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/sets"
+	prowapi "k8s.io/test-infra/prow/apis/prowjobs/v1"
 	prowconfig "k8s.io/test-infra/prow/config"
 )
 
@@ -395,6 +396,73 @@ func TestMergePresubmits(t *testing.T) {
 					Labels:         map[string]string{"foo": "bar"},
 					MaxConcurrency: 10,
 					Cluster:        "somewhere",
+				},
+				AlwaysRun: true,
+				Reporter: prowconfig.Reporter{
+					Context:    "context",
+					SkipReport: true,
+				},
+				RegexpChangeMatcher: prowconfig.RegexpChangeMatcher{RunIfChanged: "foo"},
+				Optional:            true,
+				Trigger:             "whatever",
+				RerunCommand:        "something",
+			},
+		},
+		{
+			name: "reporter_config field in old is kept",
+			old: &prowconfig.Presubmit{
+				JobBase: prowconfig.JobBase{
+					Name:           "pull-ci-super-duper",
+					Agent:          "agent",
+					Labels:         map[string]string{"foo": "bar"},
+					MaxConcurrency: 10,
+					Cluster:        "somewhere",
+					ReporterConfig: &prowapi.ReporterConfig{
+						Slack: &prowapi.SlackReporterConfig{
+							Channel: "some-channel",
+						},
+					},
+				},
+				AlwaysRun: true,
+				Reporter: prowconfig.Reporter{
+					Context:    "context",
+					SkipReport: true,
+				},
+				RegexpChangeMatcher: prowconfig.RegexpChangeMatcher{RunIfChanged: "foo"},
+				Optional:            true,
+				Trigger:             "whatever",
+				RerunCommand:        "something",
+			},
+			new: &prowconfig.Presubmit{
+				JobBase: prowconfig.JobBase{
+					Name:           "pull-ci-super-duper",
+					Agent:          "agent",
+					Labels:         map[string]string{"foo": "bar"},
+					MaxConcurrency: 10000,
+					Cluster:        "somewhere",
+				},
+				AlwaysRun: false,
+				Reporter: prowconfig.Reporter{
+					Context:    "context",
+					SkipReport: false,
+				},
+				RegexpChangeMatcher: prowconfig.RegexpChangeMatcher{RunIfChanged: "whatever"},
+				Optional:            false,
+				Trigger:             "whatever",
+				RerunCommand:        "something",
+			},
+			expected: prowconfig.Presubmit{
+				JobBase: prowconfig.JobBase{
+					Name:           "pull-ci-super-duper",
+					Agent:          "agent",
+					Labels:         map[string]string{"foo": "bar"},
+					MaxConcurrency: 10,
+					Cluster:        "somewhere",
+					ReporterConfig: &prowapi.ReporterConfig{
+						Slack: &prowapi.SlackReporterConfig{
+							Channel: "some-channel",
+						},
+					},
 				},
 				AlwaysRun: true,
 				Reporter: prowconfig.Reporter{
