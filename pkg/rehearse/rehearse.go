@@ -671,7 +671,7 @@ func ensureISTSInQCI(ctx context.Context, client ctrlruntimeclient.Client, ists 
 		}
 		pairs = append(pairs, istPairs...)
 	}
-	if len(pairs) == 0 {
+	if len(errs) > 0 {
 		return utilerrors.NewAggregate(errs)
 	}
 	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 3*time.Minute, true, func(ctx context.Context) (done bool, err error) {
